@@ -16,6 +16,7 @@ DURACION_VESPERTINA_SEMESTRES = 9 # 4.5 años
 from queries import (
     kpi1_permanencia_ecas,  
     kpi2_institucion_destino_opt,
+    kpi3_carrera_destino
 )
 # Asumimos que get_db_engine viene de connector.py
 from connector_db import get_db_engine
@@ -114,9 +115,6 @@ def update_dashboard(selected_year):
     # ... (Añadir hline y vline) ...
     kpi1_chart = dcc.Graph(figure=fig1)
     
-
-    # --- PASO 3: LÓGICA DE KPI 2 (EL NUEVO CÁLCULO) ---
-    
     try:
         # Ejecutar la consulta SQL optimizada para el KPI 2
         df_kpi2 = kpi2_institucion_destino_opt(engine, anio_n=anio_n_param)
@@ -153,10 +151,40 @@ def update_dashboard(selected_year):
         kpi2_chart = error_msg
 
 
-    # --- PASO 4: PLACEHOLDERS TEMPORALES PARA KPI 3, 4, 5 ---
-    # (En la implementación final, estas llamadas a funciones deberán ser completadas)
+    try:
+        # 1. Obtener datos del KPI 3 (Consulta SQL)
+        df_kpi3 = kpi3_carrera_destino(engine, anio_n=anio_n_param)
+
+        # 2. Manejo de Datos Vacíos
+        if df_kpi3.empty:
+            kpi3_chart = html.P(f"No hay datos de fuga hacia otras carreras para la {title_suffix}.", 
+                                 style={'textAlign': 'center', 'color': 'gray'})
+        else:
+            # INTEGRACIÓN COMPLETA DE PLOTLY DENTRO DEL CALLBACK (KPI 3)
+            df_kpi3_top = df_kpi3.head(10).sort_values(by='Porcentaje', ascending=True)
+            
+            fig3 = px.bar(df_kpi3_top, 
+                          x='Porcentaje', 
+                          y='CARRERA_DESTINO', # Columna correcta
+                          orientation='h',
+                          title=f'KPI 3: Top 10 Carreras de Destino ({title_suffix})',
+                          text='Porcentaje',
+                          template="plotly_white")
+            
+            fig3.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig3.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis={'categoryorder': 'total ascending'})
+            
+            kpi3_chart = dcc.Graph(figure=fig3)
+
+    except Exception as e:
+        print(f"Error en KPI 3 para el año {selected_year}: {e}")
+        error_msg = html.Div([
+            html.P("Error al cargar KPI 3 (Fuga por Carrera).", style={'color': 'darkred'}),
+            html.Pre(f"Detalle: {e}")
+        ])
+        kpi3_chart = error_msg
+
     empty_content = html.P("KPI no implementado aún.")
-    kpi3_chart = empty_content
     kpi4_chart = empty_content
     kpi5_chart = empty_content
 
