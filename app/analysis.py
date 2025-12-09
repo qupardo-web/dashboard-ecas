@@ -9,7 +9,8 @@ import pandas as pd
 from queries import (
     kpi1_permanencia_ecas,  
     kpi2_institucion_destino_opt,
-    kpi3_carrera_destino
+    kpi3_carrera_destino,
+    kpi4_area_destino
 )
 from connector_db import get_db_engine
 from graphics_gen import generate_bar_chart
@@ -103,7 +104,49 @@ def update_dashboard(selected_year):
     fig1 = px.line(df_permanencia_full, x='Año', y='Tasa_Permanencia_ECAS', 
                     title=f'KPI 1: Tasa de Permanencia Anual en ECAS', markers=True,
                     template="plotly_white", line_shape='spline')
-    # ... (Añadir hline y vline) ...
+    
+    fig1.add_hline(y=tasa_general_permanencia, line_dash="dash", line_color="red",
+                    annotation_text=f"Promedio Total: {tasa_general_permanencia:.2f}%", 
+                    annotation_position="top right")
+
+    # 🔑 NUEVA LÓGICA: RESALTAR EL AÑO SELECCIONADO
+    if selected_year != 'ALL' and selected_year is not None:
+         # 1. Ensure the year is an integer for Plotly's x-axis calculation
+         try:
+             anio_n_int = int(selected_year)
+         except (ValueError, TypeError):
+             return kpi1_chart # If the value is bad, return current state
+             
+         # 2. Add Vertical Line (VLINE) at the selected year's x-coordinate
+         fig1.add_vline(
+             x=anio_n_int, 
+             line_dash="dot", 
+             line_color="blue", 
+             opacity=0.8,
+             # Optionally, add a label at the bottom of the line
+             annotation_text=f"Cohorte {anio_n_int}", 
+             annotation_position="bottom right"
+         )
+         
+         # 3. Add Annotation (Marker) to show the exact percentage value
+         try:
+             # Look up the percentage for the selected year
+             tasa_anual = df_permanencia_full[df_permanencia_full['Año'] == anio_n_int]['Tasa_Permanencia_ECAS'].iloc[0]
+             
+             fig1.add_annotation(
+                 x=anio_n_int, 
+                 y=tasa_anual, 
+                 text=f"{tasa_anual}%", 
+                 showarrow=True, 
+                 arrowhead=1,
+                 font=dict(size=14, color="blue"),
+                 bgcolor="rgba(255, 255, 255, 0.7)"
+             )
+         except IndexError:
+             pass # Handle case where the year might not exist in the data
+             
+    kpi1_chart = dcc.Graph(figure=fig1)
+    
     kpi1_chart = dcc.Graph(figure=fig1)
     
     df_kpi2 = kpi2_institucion_destino_opt(engine, anio_n=anio_n_param)
@@ -118,8 +161,12 @@ def update_dashboard(selected_year):
     titulo = f'KPI 3: Top 10 Carreras de Destino ({title_suffix})'
     kpi3_chart = generate_bar_chart(df_kpi3, carrera, titulo)
 
+    df_kpi4 = kpi4_area_destino(engine, anio_n=anio_n_param)
+    area= 'AREA_DESTINO'
+    titulo = f'KPI 4: Top 10 Areas de conocimiento'
+    kpi4_chart = generate_bar_chart(df_kpi4, area, titulo)
+
     empty_content = html.P("KPI no implementado aún.")
-    kpi4_chart = empty_content
     kpi5_chart = empty_content
 
     # 5. Retornar todos los Outputs

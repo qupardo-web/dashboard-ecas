@@ -197,3 +197,70 @@ def kpi3_carrera_destino(db_conn, anio_n=None):
         df_kpi3['Porcentaje'] = (df_kpi3['Total_Fuga'] / total_fuga_general) * 100
         
     return df_kpi3
+
+def kpi4_area_destino(db_conn, anio_n=None):
+    """
+    Calcula la distribución de la fuga de ECAS por área de la carrera de destino.
+    """
+    
+    # 🔑 CORRECCIÓN: El filtro solo se aplica si anio_n NO es None. 
+    # Si anio_n es None (Total General), el filtro queda vacío, consultando todos los años.
+    filter_anio = ""
+    if anio_n is not None:
+        filter_anio = f"AND T1.cat_periodo = {anio_n}"
+
+    sql_query = f"""
+    WITH Cohorte_Origen AS (
+        -- Paso 1: Identificar a los estudiantes en ECAS en el año N, aplicando la exclusión por graduación estimada
+        SELECT
+            mrun,
+            cat_periodo AS anio
+        FROM (
+            SELECT
+                mrun, cat_periodo, cod_inst, jornada, dur_estudio_carr, anio_ing_carr_ori
+            FROM 
+                vista_matriculas_unificada
+            WHERE
+                cod_inst = {COD_INST_ECAS}
+        ) AS T1
+        WHERE 
+            -- Exclusión: Permanencia (en semestres) < Duración Teórica
+            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
+            (CASE WHEN T1.jornada LIKE '%Vespertino%' THEN {DURACION_VESPERTINA_SEMESTRES} ELSE {DURACION_DIURNA_SEMESTRES} END)
+            
+        {filter_anio}
+    ),
+
+    Fuga_Destino AS (
+        -- Paso 2: Unir la cohorte con el destino en el año N+1
+        SELECT 
+            C.mrun,
+            D.area_conocimiento AS area_destino 
+        FROM
+            Cohorte_Origen AS C
+        INNER JOIN
+            vista_matriculas_unificada AS D ON C.mrun = D.mrun AND D.cat_periodo = C.anio + 1
+        WHERE
+            D.cod_inst != {COD_INST_ECAS} -- Filtrar la FUGA (se fueron a otra institución)
+    )
+
+    -- Paso 3: Agrupar y calcular el porcentaje total
+    SELECT
+        area_destino AS AREA_DESTINO, -- 🔑 CAMBIO CLAVE: Alias de salida
+        COUNT(mrun) AS Total_Fuga
+    FROM
+        Fuga_Destino
+    GROUP BY
+        area_destino
+    ORDER BY
+        Total_Fuga DESC;
+    """
+    
+    df_kpi4 = pd.read_sql(sql_query, db_conn)
+    
+    # Calcular el porcentaje en Python 
+    total_fuga_general = df_kpi4['Total_Fuga'].sum()
+    if total_fuga_general > 0:
+        df_kpi4['Porcentaje'] = (df_kpi4['Total_Fuga'] / total_fuga_general) * 100
+        
+    return df_kpi4
