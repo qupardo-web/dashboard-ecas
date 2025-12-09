@@ -70,7 +70,7 @@ def get_df_fuga_base(db_conn, anio_n=None):
         area_conocimiento,
         dur_estudio_carr,  
         jornada,
-        anio_ing_carr_ori  
+        anio_ing_carr_ori
     FROM 
         vista_matriculas_unificada; 
     """

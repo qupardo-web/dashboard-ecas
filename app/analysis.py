@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np # Necesario para la función get_df_fuga_base (si no está ya importado en queries.py)
 import os # Solo si necesitas configurar el entorno de conexión, aunque no se usa directamente en el código de Dash
 
+DURACION_DIURNA_SEMESTRES = 8 # 4 años
+DURACION_VESPERTINA_SEMESTRES = 9 # 4.5 años
 # --- Importar todas las funciones de queries.py ---
 # Asumimos que todas las funciones están en queries.py
 from queries import (
@@ -125,9 +127,16 @@ def update_dashboard(selected_year):
     
     # Si no hay fugados, mostrar mensajes de "Datos no disponibles"
     if df_fuga.empty:
-        empty_message = html.P(f"No hay datos de fuga disponibles para la {title_suffix}.", style={'textAlign': 'center', 'color': 'gray'})
-        empty_chart = dcc.Graph(figure=go.Figure())
-        return kpi1_chart, empty_message, empty_message, empty_message, empty_message
+        # Mensaje para los gráficos de la segunda fila
+        error_content = html.Div(
+            [html.H5("Datos no disponibles", style={'textAlign': 'center'}),
+             html.P(f"No hay datos de fuga para la {title_suffix} o la cohorte no tiene actividad posterior.", style={'textAlign': 'center'})],
+            style={'paddingTop': '50px', 'paddingBottom': '50px'}
+        )
+        empty_graph_container = dcc.Graph(figure=go.Figure())
+        
+        # Retornar los 5 Outputs (KPI 1 ya está calculado)
+        return kpi1_chart, error_content, error_content, error_content, error_content
 
     
     # --- KPI 2: Institución de Destino ---
