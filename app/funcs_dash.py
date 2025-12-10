@@ -3,6 +3,27 @@ import plotly.express as px
 from dash import dcc
 from dash import html
 
+FUGA_CACHE_ANUAL = {}
+
+def get_kpi_data(kpi_func, year, kpi_key, db_engine):
+    global FUGA_CACHE_ANUAL
+    year_key = year if year is not None else 'ALL'
+    
+    # 1. Verificar si el año ya está en el caché
+    if year_key not in FUGA_CACHE_ANUAL:
+        FUGA_CACHE_ANUAL[year_key] = {}
+        
+    # 2. Verificar si el KPI específico ya está en el caché
+    if kpi_key not in FUGA_CACHE_ANUAL[year_key]:
+        # Si no está en caché, ejecutar la consulta y almacenar
+        print(f"Buscando datos en DB para KPI {kpi_key} - Cohorte: {year_key}")
+        df = kpi_func(db_engine, anio_n=year)
+        FUGA_CACHE_ANUAL[year_key][kpi_key] = df
+    else:
+        print(f"Usando caché para KPI {kpi_key} - Cohorte: {year_key}")
+
+    return FUGA_CACHE_ANUAL[year_key][kpi_key]
+
 #Generador de graficos de barra
 def generate_bar_chart(df, y_col, title):
     """

@@ -1,5 +1,4 @@
 #Archivo para realizar visualizaciones con Dash
-
 import dash
 from dash import dcc
 from dash import html
@@ -13,9 +12,10 @@ from queries import (
     kpi4_area_destino
 )
 from connector_db import get_db_engine
-from graphics_gen import (
+from funcs_dash import (
     generate_bar_chart,
-    generate_pie_chart)
+    generate_pie_chart,
+    get_kpi_data)
 
 app = dash.Dash(__name__, title="ECAS Fuga y Permanencia")
 engine = get_db_engine() # Establecer conexión a la DB
@@ -30,7 +30,8 @@ if engine is not None:
     try:
         # Carga del KPI más simple
         df_permanencia_full, tasa_general_permanencia = kpi1_permanencia_ecas(engine)
-        years_available = sorted(df_permanencia_full['Año'])
+        years_start = sorted(df_permanencia_full['Año']-1)
+        years_available = ['ALL'] + years_start
     except Exception as e:
         print(f"❌ ERROR AL CARGAR KPI 1: {e}")
         df_permanencia_full = pd.DataFrame({'Año': [2007], 'Tasa_Permanencia_ECAS': [0]}) # DataFrame falso si falla la carga
@@ -94,15 +95,32 @@ app.layout = html.Div(style={'backgroundColor': '#f8f9fa', 'padding': '20px'}, c
 )
 
 def update_dashboard(selected_year):
+    global engine
     
-    # 1. Ajustar el parámetro para las queries
-    if selected_year == 'ALL':
+    # Inicialización segura
+    anio_n_param = None
+    title_suffix = "Total General"
+    anio_n_int = None
+    anio_resultado_int = None
+    
+    # 1. AJUSTE DE PARÁMETROS Y MANEJO DE TIPOS (CORRECCIÓN CLAVE)
+    if selected_year == 'ALL' or selected_year is None:
         anio_n_param = None
         title_suffix = "Total General"
+        
     else:
-        anio_n_param = selected_year
-        title_suffix = f"Cohorte {selected_year} → {selected_year + 1}"
+        try:
+            anio_n_int = int(selected_year)
+            anio_n_param = anio_n_int
+            anio_resultado_int = anio_n_int + 1
+            title_suffix = f"Cohorte {anio_n_int} → {anio_resultado_int}"
+            
+        except (ValueError, TypeError):
+            anio_n_param = None
+            title_suffix = "Error de Selección"
 
+
+    # 2. GENERAR GRÁFICO KPI 1 (La Tasa está en el Año de Resultado)
     fig1 = px.line(df_permanencia_full, x='Año', y='Tasa_Permanencia_ECAS', 
                     title=f'KPI 1: Tasa de Permanencia Anual en ECAS', markers=True,
                     template="plotly_white", line_shape='spline')
@@ -111,62 +129,50 @@ def update_dashboard(selected_year):
                     annotation_text=f"Promedio Total: {tasa_general_permanencia:.2f}%", 
                     annotation_position="top right")
 
-    # 🔑 NUEVA LÓGICA: RESALTAR EL AÑO SELECCIONADO
-    if selected_year != 'ALL' and selected_year is not None:
-         # 1. Ensure the year is an integer for Plotly's x-axis calculation
-         try:
-             anio_n_int = int(selected_year)
-         except (ValueError, TypeError):
-             return kpi1_chart # If the value is bad, return current state
-             
-         # 2. Add Vertical Line (VLINE) at the selected year's x-coordinate
-         fig1.add_vline(
-             x=anio_n_int, 
-             line_dash="dot", 
-             line_color="blue", 
-             opacity=0.8,
-             # Optionally, add a label at the bottom of the line
-             annotation_text=f"Cohorte {anio_n_int}", 
-             annotation_position="bottom right"
-         )
-         
-         # 3. Add Annotation (Marker) to show the exact percentage value
-         try:
-             # Look up the percentage for the selected year
-             tasa_anual = df_permanencia_full[df_permanencia_full['Año'] == anio_n_int]['Tasa_Permanencia_ECAS'].iloc[0]
-             
-             fig1.add_annotation(
-                 x=anio_n_int, 
-                 y=tasa_anual, 
-                 text=f"{tasa_anual}%", 
-                 showarrow=True, 
-                 arrowhead=1,
-                 font=dict(size=14, color="blue"),
-                 bgcolor="rgba(255, 255, 255, 0.7)"
-             )
-         except IndexError:
-             pass # Handle case where the year might not exist in the data
-             
+    if anio_n_param is not None:
+        
+        fig1.add_vline(
+            x=anio_resultado_int, 
+            line_dash="dot", 
+            line_color="blue", 
+            opacity=0.8,
+        )
+        
+        try:
+            # Buscamos la tasa usando el AÑO DE RESULTADO (N+1)
+            tasa_anual = df_permanencia_full[df_permanencia_full['Año'] == anio_resultado_int]['Tasa_Permanencia_ECAS'].iloc[0]
+            
+            fig1.add_annotation(
+                x=anio_resultado_int, # Posición X es el año de resultado
+                y=tasa_anual, 
+                text=f"{tasa_anual}%", 
+                showarrow=True, 
+                arrowhead=1,
+                font=dict(size=14, color="blue"),
+                bgcolor="rgba(255, 255, 255, 0.7)"
+            )
+        except IndexError:
+            pass
+            
     kpi1_chart = dcc.Graph(figure=fig1)
     
-    kpi1_chart = dcc.Graph(figure=fig1)
-    
-    df_kpi2 = kpi2_institucion_destino_opt(engine, anio_n=anio_n_param)
-
+    # KPI 2: Institución de Destino
+    # anio_n_param = Año de inicio (N)
+    df_kpi2 = get_kpi_data(kpi2_institucion_destino_opt, anio_n_param, 'kpi2', engine) 
     institucion = 'INST_DESTINO'
     titulo = f'KPI 2: Top 10 Instituciones de Destino ({title_suffix})'
     kpi2_chart = generate_bar_chart(df_kpi2, institucion, titulo)
 
-    df_kpi3 = kpi3_carrera_destino(engine, anio_n=anio_n_param)
-
+    # KPI 3: Carrera de Destino
+    df_kpi3 = get_kpi_data(kpi3_carrera_destino, anio_n_param, 'kpi3', engine)
     carrera= 'CARRERA_DESTINO'
     titulo = f'KPI 3: Top 10 Carreras de Destino ({title_suffix})'
     kpi3_chart = generate_bar_chart(df_kpi3, carrera, titulo)
 
-    
-    df_kpi4 = kpi4_area_destino(engine, anio_n=anio_n_param)
+    # KPI 4: Área de Destino
+    df_kpi4 = get_kpi_data(kpi4_area_destino, anio_n_param, 'kpi4', engine)
 
-    total_fugados_cohorte = df_kpi2['Total_Fuga'].sum()
+    total_fugados_cohorte = df_kpi4['Total_Fuga'].sum()
     subtitulo_metrica = f"Total de Estudiantes que dejaron ECAS este año: {total_fugados_cohorte}"
     area= 'AREA_DESTINO'
     titulo = f'KPI 4: Top 10 Areas de conocimiento'

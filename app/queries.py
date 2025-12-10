@@ -58,7 +58,7 @@ def kpi1_permanencia_ecas(db_conn, anio=None):
             tasa_permanencia = (estudiantes_permanecen / len(mrun_anio_n_activos)) * 100
             
             lista_permanencia.append({
-                'Año': anio_n,
+                'Año': anio_n_mas_1,
                 'Tasa_Permanencia_ECAS': round(tasa_permanencia, 2)
         })
 
