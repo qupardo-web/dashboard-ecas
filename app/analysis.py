@@ -13,7 +13,9 @@ from queries import (
     kpi4_area_destino
 )
 from connector_db import get_db_engine
-from graphics_gen import generate_bar_chart
+from graphics_gen import (
+    generate_bar_chart,
+    generate_pie_chart)
 
 app = dash.Dash(__name__, title="ECAS Fuga y Permanencia")
 engine = get_db_engine() # Establecer conexión a la DB
@@ -161,10 +163,19 @@ def update_dashboard(selected_year):
     titulo = f'KPI 3: Top 10 Carreras de Destino ({title_suffix})'
     kpi3_chart = generate_bar_chart(df_kpi3, carrera, titulo)
 
+    
     df_kpi4 = kpi4_area_destino(engine, anio_n=anio_n_param)
+
+    total_fugados_cohorte = df_kpi2['Total_Fuga'].sum()
+    subtitulo_metrica = f"Total de Estudiantes que dejaron ECAS este año: {total_fugados_cohorte}"
     area= 'AREA_DESTINO'
     titulo = f'KPI 4: Top 10 Areas de conocimiento'
-    kpi4_chart = generate_bar_chart(df_kpi4, area, titulo)
+    kpi4_graph = generate_pie_chart(df_kpi4, area, 'Total_Fuga', titulo)
+
+    kpi4_chart = html.Div([
+        html.H4(subtitulo_metrica, style={'textAlign': 'center', 'marginBottom': '10px'}),
+        kpi4_graph
+    ])
 
     empty_content = html.P("KPI no implementado aún.")
     kpi5_chart = empty_content

@@ -74,8 +74,6 @@ def kpi2_institucion_destino_opt(db_conn, anio_n=None):
     Calcula la distribución de la fuga de ECAS por institución de destino
     utilizando una consulta SQL única para eficiencia.
     """
-    
-    # El filtro de año se construye aquí
     filter_anio = ""
     if anio_n is not None:
         filter_anio = f"AND T1.cat_periodo = {anio_n}"
@@ -202,9 +200,6 @@ def kpi4_area_destino(db_conn, anio_n=None):
     """
     Calcula la distribución de la fuga de ECAS por área de la carrera de destino.
     """
-    
-    # 🔑 CORRECCIÓN: El filtro solo se aplica si anio_n NO es None. 
-    # Si anio_n es None (Total General), el filtro queda vacío, consultando todos los años.
     filter_anio = ""
     if anio_n is not None:
         filter_anio = f"AND T1.cat_periodo = {anio_n}"

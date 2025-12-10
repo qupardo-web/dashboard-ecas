@@ -35,3 +35,35 @@ def generate_bar_chart(df, y_col, title):
                       yaxis={'categoryorder': 'total ascending'})
                       
     return dcc.Graph(figure=fig)
+
+def generate_pie_chart(df, names_col, values_col, title):
+    
+    # Manejo de datos vacíos
+    if df.empty:
+        return html.P(f"No hay datos de distribución disponibles para {title}.", 
+                      style={'textAlign': 'center', 'color': 'gray'})
+    
+    # Generar el gráfico de pastel
+    fig = px.pie(
+        df, 
+        names=names_col, 
+        values=values_col, 
+        title=title, 
+        template="plotly_white"
+    )
+    
+    # Ajustes de formato: mostrar el porcentaje y la etiqueta
+    fig.update_traces(
+        textposition='inside', 
+        textinfo='percent+label',
+        # Opción para ordenar las porciones por tamaño (opcional, pero útil)
+        sort=True
+    )
+    
+    fig.update_layout(
+        showlegend=True,
+        uniformtext_minsize=12,
+        uniformtext_mode='hide'
+    )
+                      
+    return dcc.Graph(figure=fig)
