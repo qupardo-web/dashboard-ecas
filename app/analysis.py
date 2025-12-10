@@ -68,7 +68,7 @@ app.layout = html.Div(style={'backgroundColor': '#f8f9fa', 'padding': '20px'}, c
         dcc.Dropdown(
             id='year-selector', 
             options=years_available,
-            value=2007, # Valor inicial: Total General
+            value='ALL', # Valor inicial: Total General
             clearable=False,
             style={'borderRadius': '5px'}
         )
@@ -173,7 +173,10 @@ def update_dashboard(selected_year):
     df_kpi4 = get_kpi_data(kpi4_area_destino, anio_n_param, 'kpi4', engine)
 
     total_fugados_cohorte = df_kpi4['Total_Fuga'].sum()
-    subtitulo_metrica = f"Total de Estudiantes que dejaron ECAS este año: {total_fugados_cohorte}"
+    if anio_n_param is None:
+        subtitulo_metrica = f"Total de Estudiantes que dejaron ECAS: {total_fugados_cohorte}"
+    else:
+        subtitulo_metrica = f"Total de Estudiantes que dejaron ECAS este año: {total_fugados_cohorte}"
     area= 'AREA_DESTINO'
     titulo = f'KPI 4: Top 10 Areas de conocimiento'
     kpi4_graph = generate_pie_chart(df_kpi4, area, 'Total_Fuga', titulo)
