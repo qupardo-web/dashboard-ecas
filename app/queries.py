@@ -70,64 +70,43 @@ def kpi1_permanencia_ecas(db_conn, anio=None):
         return df_permanencia, round(tasa_general, 2)
  
 def kpi2_institucion_destino_opt(db_conn, anio_n=None):
-    """
-    Calcula la distribución de la fuga de ECAS por institución de destino
-    utilizando una consulta SQL única para eficiencia.
-    """
+
     filter_anio = ""
+
     if anio_n is not None:
         filter_anio = f"AND T1.cat_periodo = {anio_n}"
-        
+    
     sql_query = f"""
-    WITH Cohorte_Origen AS (
-        -- Paso 1: Identificar a los estudiantes en ECAS en el año N, aplicando la exclusión por graduación estimada
         SELECT
-            mrun,
-            cat_periodo AS anio
-        FROM (
-            SELECT
-                mrun, cat_periodo, cod_inst, jornada, dur_estudio_carr, anio_ing_carr_ori
-            FROM 
-                vista_matriculas_unificada
-            WHERE
-                cod_inst = {COD_INST_ECAS}
-        ) AS T1
-        WHERE 
-            -- Exclusión: Permanencia (en semestres) < Duración Teórica
-            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
-            (CASE WHEN T1.jornada LIKE '%Vespertino%' THEN {DURACION_VESPERTINA_SEMESTRES} ELSE {DURACION_DIURNA_SEMESTRES} END)
-            
-        {filter_anio}
-    ),
-
-    Fuga_Destino AS (
-        -- Paso 2: Unir la cohorte con el destino en el año N+1
-        SELECT 
-            C.mrun,
-            D.nomb_inst AS inst_destino
-        FROM
-            Cohorte_Origen AS C
-        INNER JOIN
-            vista_matriculas_unificada AS D ON C.mrun = D.mrun AND D.cat_periodo = C.anio + 1
-        WHERE
-            D.cod_inst != {COD_INST_ECAS} -- Filtrar la FUGA (se fueron a otra institución)
-    )
-
-    -- Paso 3: Agrupar y calcular el porcentaje total
-    SELECT
-        inst_destino AS INST_DESTINO,
-        COUNT(mrun) AS Total_Fuga
+        T2.nomb_inst AS INST_DESTINO,
+        COUNT(T2.mrun) AS Total_Fuga
     FROM
-        Fuga_Destino
+        vista_matriculas_unificada AS T1
+    INNER JOIN
+        vista_matriculas_unificada AS T2
+        ON T1.mrun = T2.mrun AND T2.cat_periodo = T1.cat_periodo + 1
+    WHERE
+        T1.cod_inst = {COD_INST_ECAS} -- Origen: ECAS
+        AND T2.cod_inst != {COD_INST_ECAS} -- Destino: No es ECAS (Es fuga)
+        -- Exclusión (misma lógica de permanencia)
+        AND (
+            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
+            (CASE 
+                WHEN T1.jornada LIKE '%Vespertino%' 
+                THEN {DURACION_VESPERTINA_SEMESTRES} 
+                ELSE {DURACION_DIURNA_SEMESTRES} 
+            END)
+        )
+        {filter_anio} -- Aplica el filtro de año
     GROUP BY
-        inst_destino
+        T2.nomb_inst
     ORDER BY
         Total_Fuga DESC;
     """
-    
+
     df_kpi2 = pd.read_sql(sql_query, db_conn)
     
-    # Calcular el porcentaje en Python (más fácil que en SQL)
+    #Calculo de porcentaje
     total_fuga_general = df_kpi2['Total_Fuga'].sum()
     if total_fuga_general > 0:
         df_kpi2['Porcentaje'] = (df_kpi2['Total_Fuga'] / total_fuga_general) * 100
@@ -141,48 +120,29 @@ def kpi3_carrera_destino(db_conn, anio_n=None):
         filter_anio = f"AND T1.cat_periodo = {anio_n}"
 
     sql_query = f"""
-    WITH Cohorte_Origen AS (
-        -- Paso 1: Identificar a los estudiantes en ECAS en el año N, aplicando la exclusión por graduación estimada
-        SELECT
-            mrun,
-            cat_periodo AS anio
-        FROM (
-            SELECT
-                mrun, cat_periodo, cod_inst, jornada, dur_estudio_carr, anio_ing_carr_ori
-            FROM 
-                vista_matriculas_unificada
-            WHERE
-                cod_inst = {COD_INST_ECAS}
-        ) AS T1
-        WHERE 
-            -- Exclusión: Permanencia (en semestres) < Duración Teórica
-            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
-            (CASE WHEN T1.jornada LIKE '%Vespertino%' THEN {DURACION_VESPERTINA_SEMESTRES} ELSE {DURACION_DIURNA_SEMESTRES} END)
-            
-        {filter_anio}
-    ),
-
-    Fuga_Destino AS (
-        -- Paso 2: Unir la cohorte con el destino en el año N+1
-        SELECT 
-            C.mrun,
-            D.nomb_carrera AS carrera_destino -- CAMBIO CLAVE: Capturamos la carrera de destino
-        FROM
-            Cohorte_Origen AS C
-        INNER JOIN
-            vista_matriculas_unificada AS D ON C.mrun = D.mrun AND D.cat_periodo = C.anio + 1
-        WHERE
-            D.cod_inst != {COD_INST_ECAS} -- Filtrar la FUGA (se fueron a otra institución)
-    )
-
-    -- Paso 3: Agrupar y calcular el porcentaje total
     SELECT
-        carrera_destino AS CARRERA_DESTINO, -- CAMBIO CLAVE: Alias de salida
-        COUNT(mrun) AS Total_Fuga
+        T2.nomb_carrera AS CARRERA_DESTINO,
+        COUNT(T2.mrun) AS Total_Fuga
     FROM
-        Fuga_Destino
+        vista_matriculas_unificada AS T1
+    INNER JOIN
+        vista_matriculas_unificada AS T2
+        ON T1.mrun = T2.mrun AND T2.cat_periodo = T1.cat_periodo + 1
+    WHERE
+        T1.cod_inst = {COD_INST_ECAS}
+        AND T2.cod_inst != {COD_INST_ECAS}
+        -- Exclusión (misma lógica de permanencia)
+        AND (
+            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
+            (CASE 
+                WHEN T1.jornada LIKE '%Vespertino%' 
+                THEN {DURACION_VESPERTINA_SEMESTRES} 
+                ELSE {DURACION_DIURNA_SEMESTRES}
+            END)
+        )
+        {filter_anio}
     GROUP BY
-        carrera_destino
+        T2.nomb_carrera
     ORDER BY
         Total_Fuga DESC;
     """
@@ -205,48 +165,29 @@ def kpi4_area_destino(db_conn, anio_n=None):
         filter_anio = f"AND T1.cat_periodo = {anio_n}"
 
     sql_query = f"""
-    WITH Cohorte_Origen AS (
-        -- Paso 1: Identificar a los estudiantes en ECAS en el año N, aplicando la exclusión por graduación estimada
-        SELECT
-            mrun,
-            cat_periodo AS anio
-        FROM (
-            SELECT
-                mrun, cat_periodo, cod_inst, jornada, dur_estudio_carr, anio_ing_carr_ori
-            FROM 
-                vista_matriculas_unificada
-            WHERE
-                cod_inst = {COD_INST_ECAS}
-        ) AS T1
-        WHERE 
-            -- Exclusión: Permanencia (en semestres) < Duración Teórica
-            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
-            (CASE WHEN T1.jornada LIKE '%Vespertino%' THEN {DURACION_VESPERTINA_SEMESTRES} ELSE {DURACION_DIURNA_SEMESTRES} END)
-            
-        {filter_anio}
-    ),
-
-    Fuga_Destino AS (
-        -- Paso 2: Unir la cohorte con el destino en el año N+1
-        SELECT 
-            C.mrun,
-            D.area_conocimiento AS area_destino 
-        FROM
-            Cohorte_Origen AS C
-        INNER JOIN
-            vista_matriculas_unificada AS D ON C.mrun = D.mrun AND D.cat_periodo = C.anio + 1
-        WHERE
-            D.cod_inst != {COD_INST_ECAS} -- Filtrar la FUGA (se fueron a otra institución)
-    )
-
-    -- Paso 3: Agrupar y calcular el porcentaje total
     SELECT
-        area_destino AS AREA_DESTINO, -- 🔑 CAMBIO CLAVE: Alias de salida
-        COUNT(mrun) AS Total_Fuga
+        T2.area_conocimiento AS AREA_DESTINO,
+        COUNT(T2.mrun) AS Total_Fuga
     FROM
-        Fuga_Destino
+        vista_matriculas_unificada AS T1
+    INNER JOIN
+        vista_matriculas_unificada AS T2
+        ON T1.mrun = T2.mrun AND T2.cat_periodo = T1.cat_periodo + 1
+    WHERE
+        T1.cod_inst = {COD_INST_ECAS}
+        AND T2.cod_inst != {COD_INST_ECAS}
+        -- Exclusión (misma lógica de permanencia)
+        AND (
+            (T1.cat_periodo - T1.anio_ing_carr_ori) * 2 < 
+            (CASE 
+                WHEN T1.jornada LIKE '%Vespertino%' 
+                THEN {DURACION_VESPERTINA_SEMESTRES}
+                ELSE {DURACION_DIURNA_SEMESTRES}
+            END)
+        )
+        {filter_anio}
     GROUP BY
-        area_destino
+        T2.area_conocimiento
     ORDER BY
         Total_Fuga DESC;
     """
